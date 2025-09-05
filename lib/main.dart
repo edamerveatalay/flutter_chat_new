@@ -9,6 +9,8 @@ import 'firebase_options.dart'; // FlutterFire CLI ile oluşturuldu
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Firebase öncesi gerekli
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  //DefaultFirebaseOptions → firebase_options.dart dosyasından gelir ve platforma özgü Firebase yapılandırma seçeneklerini içerir.
+  // currentPlatform → uygulamanın çalıştığı platforma (iOS, Android, web vb.) göre doğru yapılandırmayı seçer.
   runApp(MyApp());
 }
 
@@ -17,6 +19,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: StreamBuilder<User?>(
+        //kullanıcının giriş durumunu dinlemek için StreamBuilder kullandık
+        //User? → Firebase Authentication'dan gelen kullanıcı nesnesi. '?' işareti, bu nesnenin null (boş) olabileceğini belirtir.
+        //Yani kullanıcı giriş yapmamışsa null dönebilir.
         stream: FirebaseAuth.instance
             .authStateChanges(), //kullanıcının giriş durumunu sürekli dinleyecek instance ile firebase'den kullanıcı durumuna erişiyoruz
         builder: (context, snapshot) {

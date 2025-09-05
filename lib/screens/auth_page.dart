@@ -12,16 +12,18 @@ class AuthPage extends StatefulWidget {
 }
 
 class _AuthPageState extends State<AuthPage> {
-  final emailController = TextEditingController();
+  final emailController =
+      TextEditingController(); //email ve şifre girişlerini kontrol edecek controllerlar
   final passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final _formKey =
+      GlobalKey<FormState>(); //form doğrulama için global key oluşturduk
 
   void _signIn() async {
     //giriş fonksiyonu oluşturduk
     String email = emailController
         .text; //email yazısına emailController'ı yani doğru yanlışı kontrol edecek fonksiyonu atadık
     String password = passwordController.text;
-    print('Email: $email');
+    print('Email: $email'); //konsola yazdırdık
     print('Password: $password');
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -48,6 +50,7 @@ class _AuthPageState extends State<AuthPage> {
           padding: EdgeInsets.all(20),
           width: 200,
           child: Form(
+            //form doğrulama için form widget'ı kullandık
             key: _formKey,
             child: Column(
               children: [
@@ -61,6 +64,8 @@ class _AuthPageState extends State<AuthPage> {
                         OutlineInputBorder(), //TextField yani giriş alan ve içindeki yönergeyle yazılacak şeyi yönlendiren widget'a kenarlık ekler
                   ),
                   validator: (value) {
+                    //form doğrulama için validator ekledik
+                    //value → kullanıcının TextFormField'a girdiği değeri temsil eder.
                     if (value == null || value.isEmpty) {
                       return 'Email boş olamaz ';
                     }
@@ -81,11 +86,17 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                 ),
                 SizedBox(height: 20),
-                ElevatedButton(onPressed: _signIn, child: Text('Giriş Yap')),
+
+                ElevatedButton(
+                  //giriş yap butonu
+                  onPressed: _signIn,
+                  child: Text('Giriş Yap'),
+                ),
 
                 SizedBox(height: 20),
 
                 ElevatedButton(
+                  //kayıt ol butonu
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         Colors.green, //butonun arka plan rengini yeşil yaptık
