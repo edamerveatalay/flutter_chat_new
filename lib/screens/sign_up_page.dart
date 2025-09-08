@@ -41,7 +41,11 @@ class _SignUpPageState extends State<SignUpPage> {
           .set({
             'email': email, // belgeye "email" alanını ekler
             'password': password, // belgeye "password" alanını ekler
-          });
+            'createdAt':
+                FieldValue.serverTimestamp(), // belgeye "createdAt" alanını ekler ve sunucu zaman damgasını kullanır
+
+            //fieldvalue : firestore'da bazı özel değerleri kendi sunucunsundan almak için kullanılan sınıftır
+          }, SetOptions(merge: true));
       // !!!!!FirebaseAuth sadece giriş-çıkış içindir, Firestore ise kullanıcıya dair ek bilgileri tutmamıza yarar.
 
       Navigator.pushReplacement(

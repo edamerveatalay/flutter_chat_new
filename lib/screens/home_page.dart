@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_new/screens/users_page.dart';
+import 'package:intl/intl.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -10,6 +12,18 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  String formatTimestamp(Timestamp? ts) {
+    if (ts == null) {
+      return '...';
+    } else {
+      DateTime dt = ts.toDate();
+      return DateFormat(
+        'dd/MM/yyyy HH:mm',
+      ).format(dt); //formatı dd/MM/yyyy HH:mm olarak ayarladık
+      //sonra bu formatı dt'ye uyguladık ve string olarak döndürdük.
+    }
+  }
+
   final messageController = TextEditingController();
   final String _otherUidForTest =
       'DP7qX6JG4aP43eV2n2Kpb2KOb8Q2'; //test amaçlı başka bir kullanıcının uid'si
@@ -48,133 +62,116 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUid = FirebaseAuth.instance.currentUser!.uid;
+    //currentUser → şu an oturum açmış kullanıcıyı verir
+    /*Auth → "Bu kim?" (giriş yapan kullanıcı)
+
+Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgisi vb.) */
+
     return Scaffold(
-      appBar: AppBar(title: Text('Home Page')),
+      appBar: AppBar(
+        title: Text('Home Page'),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => UserPage.UsersPage()),
+              );
+            },
+            icon: Icon(Icons.people),
+          ),
+        ],
+      ),
 
       body: Center(
         child: Column(
           children: [
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                //mesajları listelemek için streambuilder kullandık
-                stream: FirebaseFirestore.instance
-                    .collection('chats')
-                    .doc(
-                      _getChatId(
-                        FirebaseAuth.instance.currentUser!.uid,
-                        _otherUidForTest,
-                      ),
-                    ) //sohbet id'si ile o sohbete ait mesajları alıyoruz
-                    .collection('messages')
-                    .orderBy(
-                      'timestamp',
-                      descending: true,
-                    ) //mesajları zamanına göre sıralıyoruz en yeni en üstte olacak şekilde
-                    .snapshots(), //snapshots() → Firestore'daki verilerin gerçek zamanlı olarak dinlenmesini sağlar. Yani verilerde bir değişiklik olduğunda otomatik olarak güncellenir.
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Text('Hata oluştu: ${snapshot.error}');
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return CircularProgressIndicator(); //yükleniyor göstergesi
-                  }
-                  final messages = snapshot.data!.docs; //mesaj belgeleri
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chats')
+                  .where('members', arrayContains: currentUid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Text('Hata oluştu: ${snapshot.error}');
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return CircularProgressIndicator();
+                }
+                final chats = snapshot.data!.docs;
 
-                  return ListView.builder(
-                    reverse:
-                        true, //listeyi ters çeviriyoruz ki en yeni mesaj en üstte olsun
-                    itemCount: messages.length,
+                return Expanded(
+                  child: ListView.builder(
+                    itemCount: chats.length,
                     itemBuilder: (context, index) {
-                      final message = messages[index];
-                      final isMe =
-                          message['senderId'] ==
-                          FirebaseAuth
-                              .instance
-                              .currentUser!
-                              .uid; //mesajı gönderen benim mi kontrolü
-
+                      final chatDoc = chats[index];
+                      final data = chatDoc.data() as Map<String, dynamic>;
+                      final members = List<String>.from(data['members'] ?? []);
+                      final otherUid = members.isNotEmpty
+                          ? members.firstWhere(
+                              (uid) => uid != currentUid,
+                              orElse: () => 'Bilinmiyor',
+                            )
+                          : 'Bilinmiyor';
+                      print("otherUid: $otherUid");
                       return ListTile(
-                        title: Align(
-                          alignment: isMe
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                            padding: EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: isMe ? Colors.blue : Colors.grey,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              message['text'],
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
+                        title: FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(otherUid)
+                              .get(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return Text('Yükleniyor...');
+                            } else if (snapshot.hasError) {
+                              return Text('Hata');
+                            } else if (!snapshot.hasData ||
+                                !snapshot.data!.exists) {
+                              return Text('Bilinmiyor');
+                            }
+                            ;
+                            final userData =
+                                snapshot.data!.data() as Map<String, dynamic>;
+                            return Text(userData['email'] ?? 'Bilinmiyor');
+                          },
+                        ),
+                        subtitle: Text(
+                          "Oluşturulma zamanı: ${formatTimestamp(data['createdAt'])}",
                         ),
                       );
                     },
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: 20),
-
-            TextField(
-              //mesaj giriş alanı
-              //textField → kullanıcıdan metin girişi almak için kullanılan bir widget'tır.
-              controller:
-                  messageController, //mesaj girişini kontrol edecek controller'ı bağladık
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText:
-                    'Mesajınızı girin', //labelText → TextField'ın içinde, kullanıcının ne yapması gerektiğini belirten bir etiket (label) metni gösterir.
-                //labetText ve hintText arasındaki fark: labelText, TextField'ın içinde kalıcı olarak gösterilir ve kullanıcının ne yapması gerektiğini belirtir. hintText ise, TextField boşken gösterilen ve kullanıcıya ipucu veren geçici bir metindir.
-              ),
-            ),
-
-            SizedBox(height: 20),
-
-            ElevatedButton(
-              onPressed: () async {
-                final currentId = FirebaseAuth.instance.currentUser!.uid;
-                final chatId = _getChatId(
-                  currentId,
-                  _otherUidForTest,
-                ); //burada da bir daha oluşturduk çünkü mesaj gönderirken de kime göndereceğimi bilmek için gerekiyor
-
-                //zaman alacak bir işlem yapacağımız için async yaptık
-                //butona basılınca mesaj gönderme fonksiyonu
-                //butona basılınca olacak şeyi onPressed ile belirtiyoruz
-
-                await FirebaseFirestore.instance
-                    .collection('chats')
-                    .doc(chatId)
-                    .collection('messages')
-                    .add({
-                      //.instance → o anda kullanılan Firestore servisine erişiyoruz (singleton, yani tek bir kopya).
-                      //Firestore’da messages adında bir koleksiyon (tablo gibi düşünebilirsin) seçiyoruz.
-                      //add() ile bu koleksiyona yeni bir belge (document) ekliyoruz.
-                      //Belge, bir harita (map) olarak tanımlanıyor. Burada sadece 'text' alanı var ve değeri 'Merhaba'.
-                      'text': messageController
-                          .text, //mesaj giriş alanındaki yazıyı alıp 'text' alanına atıyoruz
-                      //text alanı → Firestore’da bu belgenin içinde bir alan (field) oluşturur ve mesajın içeriğini tutar.
-                      'senderId': currentId, //mesajı gönderenin uid'si
-                      'timestamp':
-                          FieldValue.serverTimestamp(), //mesajın gönderilme zamanı (sunucu zamanı)
-                    }); //Yani Firestore’da şu şekilde bir kayıt oluşur:
-                messageController
-                    .clear(); // mesajı gönderdikten sonra inputu temizle
+                  ),
+                );
               },
-              child: Text('Mesaj gönder'),
             ),
+
             SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _signOut, //fonksiyonu çağırmıyoruz referans veriyoruz
-              child: Text('Çıkış Yap'),
-            ),
+
             SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _buildChat,
-              child: Text('Sohbet Oluştur'),
+            Column(
+              children: [
+                SizedBox(
+                  width:
+                      MediaQuery.of(context).size.width * 0.4, // aynı genişlik
+                  //mediaQuery → ekran boyutlarına erişmek için kullanılır
+                  //.size.width → ekranın genişliğini pixel cinsinden verir.
+                  //* 0.4 → bu genişliğin %40’ını alır.
+                  child: ElevatedButton(
+                    onPressed: _signOut,
+                    child: Text('Çıkış Yap'),
+                  ),
+                ),
+                SizedBox(height: 10),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.4,
+                  child: ElevatedButton(
+                    onPressed: _buildChat,
+                    child: Text('Sohbet Oluştur'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
