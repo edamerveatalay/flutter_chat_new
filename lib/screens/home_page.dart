@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_new/screens/chat_page.dart';
 import 'package:flutter_chat_new/screens/users_page.dart';
 import 'package:intl/intl.dart';
 
@@ -76,7 +77,7 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => UserPage.UsersPage()),
+                MaterialPageRoute(builder: (context) => UserPage()),
               );
             },
             icon: Icon(Icons.people),
@@ -107,7 +108,9 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
                     itemBuilder: (context, index) {
                       final chatDoc = chats[index];
                       final data = chatDoc.data() as Map<String, dynamic>;
-                      final members = List<String>.from(data['members'] ?? []);
+                      final members = List<String>.from(
+                        data['members'] ?? [],
+                      ); //members değişkeni, o sohbet odasına dahil olan kullanıcıların UID'lerinden oluşan bir listedir.
                       final otherUid = members.isNotEmpty
                           ? members.firstWhere(
                               (uid) => uid != currentUid,
@@ -116,12 +119,23 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
                           : 'Bilinmiyor';
                       print("otherUid: $otherUid");
                       return ListTile(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  ChatPage(chatId: chatDoc.id),
+                            ),
+                          );
+                          print('ChatId: ${chatDoc.id}');
+                        },
                         title: FutureBuilder<DocumentSnapshot>(
                           future: FirebaseFirestore.instance
                               .collection('users')
                               .doc(otherUid)
-                              .get(),
+                              .get(), //kullanıcıya gidip onun kullanıcı bilgilerini alıyoruz
                           builder: (context, snapshot) {
+                            //sorgunun sonucunu bekliyoruz
                             if (snapshot.connectionState ==
                                 ConnectionState.waiting) {
                               return Text('Yükleniyor...');
@@ -133,12 +147,58 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
                             }
                             ;
                             final userData =
-                                snapshot.data!.data() as Map<String, dynamic>;
-                            return Text(userData['email'] ?? 'Bilinmiyor');
+                                snapshot.data!.data()
+                                    as Map<
+                                      String,
+                                      dynamic
+                                    >; //belgedeki verilere ulaşıyoruz (email, name)
+                            return Text(
+                              userData['email'] ?? 'Bilinmiyor',
+                            ); // varsa emaili göster yoksa bilinmiyor yaz
                           },
                         ),
-                        subtitle: Text(
-                          "Oluşturulma zamanı: ${formatTimestamp(data['createdAt'])}",
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+
+                          children: [
+                            Text(
+                              "Oluşturulma zamanı: ${formatTimestamp(data['createdAt'])}",
+                            ),
+                            SizedBox(height: 4),
+
+                            StreamBuilder<QuerySnapshot>(
+                              //her sohbet için Firestore’daki messages koleksiyonunu dinleyip, varsa son mesajı gösteriyor; yoksa “Henüz mesaj yok” yazıyor.
+                              stream: FirebaseFirestore.instance
+                                  .collection('chats')
+                                  .doc(chatDoc.id)
+                                  .collection('messages')
+                                  .snapshots(), //Buradaki verileri sürekli dinleyen bir stream başlatıyoruz.
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return Text("Yükleniyor...");
+                                }
+                                if (snapshot.hasError) {
+                                  return Text("Hata oluştu");
+                                }
+                                final messages =
+                                    snapshot.data?.docs ??
+                                    []; //Firestore’dan gelen sohbet mesajlarını liste olarak alır, yoksa boş liste döner.
+
+                                if (messages.isNotEmpty) {
+                                  final lastMessage = messages.last;
+                                  final messageData =
+                                      lastMessage.data()
+                                          as Map<String, dynamic>;
+                                  return Text(
+                                    "Son mesaj: ${messageData['text'] ?? ''}",
+                                  );
+                                } else {
+                                  return Text("Henüz mesaj yok");
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       );
                     },

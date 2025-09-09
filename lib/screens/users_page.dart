@@ -1,9 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'chat_page.dart'; // ChatPage'i import ediyoruz
 
 class UserPage extends StatelessWidget {
-  const UserPage.UsersPage({super.key});
+  const UserPage({super.key});
+
+  // iki kullanıcının uid'sinden benzersiz bir chatId üret
+  String _getChatId(String uid1, String uid2) {
+    return uid1.hashCode <= uid2.hashCode ? '${uid1}_$uid2' : '${uid2}_$uid1';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,22 +45,29 @@ class UserPage extends StatelessWidget {
                         >; //doğrudan okumuyoruz, önce map'e çeviriyoruz
                 final email =
                     data['email'] ?? '-'; //eğer email yoksa '-' göster
-                //userDoc['email'] → Firestore’daki belgeden email alanını alır.
-                //?? '-' → eğer email alanı yoksa hata vermesin, yerine '-' göstersin.
 
                 final ts = data['createdAt'] as Timestamp?;
-                // Firestore'dan alınan 'createdAt' alanını Timestamp türüne dönüştürür.
-                //Timestamp → Firestore'da tarih ve saat bilgisini tutmak için kullanılan özel bir veri türüdür.
-                // '?' işareti, bu alanın null (boş) olabileceğini belirtir.
                 final created = ts == null
                     ? '-'
                     : DateFormat('dd/MM/yyyy HH:mm').format(ts.toDate());
-                //oluşturulma zamanını okunabilir hale getir”
+
+                final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+                final otherUserId = userDoc.id; // belge id = user id (uid)
+                final chatId = _getChatId(currentUserId, otherUserId);
+
                 return ListTile(
                   //her kullanıcı için bir liste öğesi oluşturur
-                  //Flutter’da liste içinde tek bir satırdır (başlık, alt başlık, ikon koyabilirsin).
                   title: Text(email),
                   subtitle: Text('Oluşturulma zamanı: $created'),
+                  onTap: () {
+                    // kullanıcıya tıklanınca sohbet sayfasına git
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatPage(chatId: chatId),
+                      ),
+                    );
+                  },
                 ); //created stringe çevir
                 //lisTile kullanıcıyı listeye ekle
               },
