@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class ChatPage extends StatefulWidget {
   final String chatId; // dışarıdan gelecek chatId'yi al
@@ -18,6 +21,40 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController messageController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+
+  // 📌 FOTOĞRAF SEÇME + YÜKLEME
+  Future<void> _sendImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null) return;
+
+    final File file = File(pickedFile.path);
+    final currentId = FirebaseAuth.instance.currentUser!.uid;
+
+    try {
+      // Firebase Storage’a yükleme
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('chat_images')
+          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      await ref.putFile(file);
+      final imageUrl = await ref.getDownloadURL();
+
+      // Firestore’a imageUrl kaydetme
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .collection('messages')
+          .add({
+            'imageUrl': imageUrl,
+            'senderId': currentId,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      print("Resim yükleme hatası: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,15 +78,13 @@ class _ChatPageState extends State<ChatPage> {
                     .orderBy(
                       'timestamp',
                       descending: true,
-                    ) // mesajları zamanına göre sıralıyoruz en yeni en üstte olacak şekilde
+                    ) // mesajları zamanına göre sıralıyoruz
                     .snapshots(), // snapshots() → Firestore'daki verilerin gerçek zamanlı olarak dinlenmesini sağlar.
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    // bağlantı durumu kontrolü
                     return Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    // hata kontrolü
                     return Text('Hata Oluştu');
                   } else {
                     final docs = snapshot
@@ -64,6 +99,7 @@ class _ChatPageState extends State<ChatPage> {
                       itemBuilder: (context, index) {
                         final data = docs[index].data() as Map<String, dynamic>;
                         final text = data['text'] ?? '';
+                        final imageUrl = data['imageUrl']; // 📸 Fotoğraf URL'si
                         final senderId = data['senderId'] ?? '';
                         final timestamp = data['timestamp'];
                         final isMe =
@@ -96,9 +132,7 @@ class _ChatPageState extends State<ChatPage> {
                               decoration: BoxDecoration(
                                 color: isMe
                                     ? Colors.blue[400]
-                                    : Colors
-                                          .grey
-                                          .shade200, // kendi mesajlarım mavi diğerleri gri
+                                    : Colors.grey.shade200,
                                 borderRadius: BorderRadius.only(
                                   topLeft: Radius.circular(isMe ? 12 : 0),
                                   topRight: Radius.circular(isMe ? 0 : 12),
@@ -109,13 +143,25 @@ class _ChatPageState extends State<ChatPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    text, // firestore’daki mesajın text'i
-                                    style: TextStyle(
-                                      color: isMe ? Colors.white : Colors.black,
-                                      fontSize: 16,
+                                  if (text.isNotEmpty)
+                                    Text(
+                                      text, // firestore’daki mesajın text'i
+                                      style: TextStyle(
+                                        color: isMe
+                                            ? Colors.white
+                                            : Colors.black,
+                                        fontSize: 16,
+                                      ),
                                     ),
-                                  ),
+                                  if (imageUrl != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Image.network(
+                                        imageUrl,
+                                        height: 150,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
                                   SizedBox(height: 4),
                                   Text(
                                     timestamp != null
@@ -125,9 +171,8 @@ class _ChatPageState extends State<ChatPage> {
                                         : '',
                                     style: TextStyle(
                                       color: isMe
-                                          ? Colors
-                                                .white70 // kendi mesajlarım
-                                          : Colors.black54, // diğer mesajlar
+                                          ? Colors.white70
+                                          : Colors.black54,
                                       fontSize: 10,
                                     ),
                                   ),
@@ -148,6 +193,10 @@ class _ChatPageState extends State<ChatPage> {
               padding: EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 children: [
+                  IconButton(
+                    icon: Icon(Icons.photo, color: Colors.green),
+                    onPressed: _sendImage, // fotoğraf gönder
+                  ),
                   Expanded(
                     child: TextField(
                       controller:
@@ -157,7 +206,6 @@ class _ChatPageState extends State<ChatPage> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         prefixIcon: Icon(Icons.message),
-                        suffixIcon: Icon(Icons.photo),
                         labelText: 'Mesajınızı girin',
                       ),
                     ),
