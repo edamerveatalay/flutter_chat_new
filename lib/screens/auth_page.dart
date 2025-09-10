@@ -44,11 +44,12 @@ class _AuthPageState extends State<AuthPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('CHAT')),
+      backgroundColor: const Color.fromARGB(255, 195, 176, 197),
+      appBar: AppBar(title: Text('GİRİŞ'), centerTitle: true),
       body: Center(
         child: Container(
           padding: EdgeInsets.all(20),
-          width: 200,
+          width: MediaQuery.of(context).size.width * 0.85,
           child: Form(
             //form doğrulama için form widget'ı kullandık
             key: _formKey,
@@ -60,8 +61,9 @@ class _AuthPageState extends State<AuthPage> {
                       emailController, //controllerları textField'lara bağladk. giriş verisi almak için
                   decoration: InputDecoration(
                     hintText: 'Email giriniz',
-                    border:
-                        OutlineInputBorder(), //TextField yani giriş alan ve içindeki yönergeyle yazılacak şeyi yönlendiren widget'a kenarlık ekler
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ), //TextField yani giriş alan ve içindeki yönergeyle yazılacak şeyi yönlendiren widget'a kenarlık ekler
                   ),
                   validator: (value) {
                     //form doğrulama için validator ekledik
@@ -82,7 +84,9 @@ class _AuthPageState extends State<AuthPage> {
                       true, //şifre alanına yazılanların görülmesini engeller
                   decoration: InputDecoration(
                     hintText: 'Şifrenizi giriniz',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                   ),
                 ),
                 SizedBox(height: 20),
@@ -98,8 +102,9 @@ class _AuthPageState extends State<AuthPage> {
                 ElevatedButton(
                   //kayıt ol butonu
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        Colors.green, //butonun arka plan rengini yeşil yaptık
+                    backgroundColor: Colors
+                        .deepPurple, //butonun arka plan rengini yeşil yaptık
+                    foregroundColor: Colors.white,
                     elevation: 12, // Increase this value for a bigger shadow
                     shadowColor: Colors.black.withAlpha(
                       4,
