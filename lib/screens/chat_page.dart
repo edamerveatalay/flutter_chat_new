@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 
 class ChatPage extends StatefulWidget {
   final String chatId; // dışarıdan gelecek chatId'yi al
+  final String otherUserEmail;
 
-  const ChatPage({super.key, required this.chatId});
+  const ChatPage({
+    super.key,
+    required this.chatId,
+    required this.otherUserEmail,
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -17,7 +22,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Chat ID: ${widget.chatId}')),
+      appBar: AppBar(title: Text('Chat ID: ${widget.otherUserEmail}')),
       body: Center(
         child: Column(
           children: [

@@ -46,10 +46,13 @@ class _HomePageState extends State<HomePage> {
 
     final chatId = _getChatId(currentUid, _otherUid); //sohbet id'si oluşturduk
 
-    await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
-      'members': [currentUid, _otherUid], //sohbetin üyeleri,
-      'createdAt': FieldValue.serverTimestamp(), //sohbetin oluşturulma zamanı
-    });
+    await FirebaseFirestore.instance.collection('chats').doc(chatId).set(
+      {
+        'members': [currentUid, _otherUid], //sohbetin üyeleri,
+        'createdAt': FieldValue.serverTimestamp(), //sohbetin oluşturulma zamanı
+      },
+      SetOptions(merge: true),
+    ); // merge true ekledim, var ise üstüne yazmasın, eklesin
 
     print("chatId: $chatId");
   }
@@ -88,22 +91,27 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
       body: Center(
         child: Column(
           children: [
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('chats')
-                  .where('members', arrayContains: currentUid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Text('Hata oluştu: ${snapshot.error}');
-                }
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return CircularProgressIndicator();
-                }
-                final chats = snapshot.data!.docs;
+            // Sohbet listesi için StreamBuilder (chats koleksiyonu)
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('chats')
+                    .where('members', arrayContains: currentUid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Text('Hata oluştu: ${snapshot.error}');
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+                  final chats = snapshot.data?.docs ?? [];
 
-                return Expanded(
-                  child: ListView.builder(
+                  if (chats.isEmpty) {
+                    return Center(child: Text('Henüz sohbet yok'));
+                  }
+
+                  return ListView.builder(
                     itemCount: chats.length,
                     itemBuilder: (context, index) {
                       final chatDoc = chats[index];
@@ -118,93 +126,109 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
                             )
                           : 'Bilinmiyor';
                       print("otherUid: $otherUid");
-                      return ListTile(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  ChatPage(chatId: chatDoc.id),
+
+                      // Eğer otherUid bulunamadıysa (ör. tek kişilik veya veri hatası) göster
+                      if (otherUid == 'Bilinmiyor') {
+                        return ListTile(title: Text('Kullanıcı bulunamadı'));
+                      }
+
+                      // chat dokümanında eğer oluşturulurken kaydedilmiş fallback email varsa alalım
+                      final fallbackEmail = (data['otherEmail'] as String?)
+                          ?.trim();
+
+                      // 🔹 Kullanıcı belgesini çek; yoksa fallbackEmail göster
+                      return FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(otherUid.trim())
+                            .get(),
+                        builder: (context, userSnapshot) {
+                          if (userSnapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return ListTile(title: Text('Yükleniyor...'));
+                          } else if (userSnapshot.hasError) {
+                            return ListTile(title: Text('Hata'));
+                          }
+
+                          String shownEmail;
+                          if (!userSnapshot.hasData ||
+                              !userSnapshot.data!.exists) {
+                            // Eğer users koleksiyonunda belge yoksa chat içindeki fallbackEmail'i göster
+                            shownEmail = fallbackEmail ?? 'Bilinmiyor';
+                          } else {
+                            final userData =
+                                userSnapshot.data!.data()
+                                    as Map<String, dynamic>?;
+                            shownEmail =
+                                (userData?['email'] as String?) ??
+                                (fallbackEmail ?? 'Bilinmiyor');
+                          }
+
+                          // Her sohbet satırında son mesajı göstermek için messages koleksiyonunu dinle
+                          return ListTile(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatPage(
+                                    chatId: chatDoc.id,
+                                    otherUserEmail: shownEmail,
+                                  ),
+                                ),
+                              );
+                              print('ChatId: ${chatDoc.id}');
+                            },
+                            title: Text(shownEmail),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Oluşturulma zamanı: ${formatTimestamp(data['createdAt'])}",
+                                ),
+                                SizedBox(height: 4),
+
+                                //her sohbet için Firestore’daki messages koleksiyonunu dinleyip, varsa son mesajı gösteriyor; yoksa “Henüz mesaj yok” yazıyor.
+                                StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('chats')
+                                      .doc(chatDoc.id)
+                                      .collection('messages')
+                                      .orderBy('timestamp', descending: true)
+                                      .limit(1)
+                                      .snapshots(), //Buradaki verileri sürekli dinleyen bir stream başlatıyoruz.
+                                  builder: (context, msgSnapshot) {
+                                    if (msgSnapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return Text("Yükleniyor...");
+                                    }
+                                    if (msgSnapshot.hasError) {
+                                      return Text("Hata oluştu");
+                                    }
+                                    final messages =
+                                        msgSnapshot.data?.docs ?? [];
+
+                                    if (messages.isNotEmpty) {
+                                      final lastMessage = messages.first;
+                                      final messageData =
+                                          lastMessage.data()
+                                              as Map<String, dynamic>;
+                                      return Text(
+                                        "Son mesaj: ${messageData['text'] ?? ''}",
+                                      );
+                                    } else {
+                                      return Text("Henüz mesaj yok");
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                           );
-                          print('ChatId: ${chatDoc.id}');
                         },
-                        title: FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(otherUid)
-                              .get(), //kullanıcıya gidip onun kullanıcı bilgilerini alıyoruz
-                          builder: (context, snapshot) {
-                            //sorgunun sonucunu bekliyoruz
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return Text('Yükleniyor...');
-                            } else if (snapshot.hasError) {
-                              return Text('Hata');
-                            } else if (!snapshot.hasData ||
-                                !snapshot.data!.exists) {
-                              return Text('Bilinmiyor');
-                            }
-                            ;
-                            final userData =
-                                snapshot.data!.data()
-                                    as Map<
-                                      String,
-                                      dynamic
-                                    >; //belgedeki verilere ulaşıyoruz (email, name)
-                            return Text(
-                              userData['email'] ?? 'Bilinmiyor',
-                            ); // varsa emaili göster yoksa bilinmiyor yaz
-                          },
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-
-                          children: [
-                            Text(
-                              "Oluşturulma zamanı: ${formatTimestamp(data['createdAt'])}",
-                            ),
-                            SizedBox(height: 4),
-
-                            StreamBuilder<QuerySnapshot>(
-                              //her sohbet için Firestore’daki messages koleksiyonunu dinleyip, varsa son mesajı gösteriyor; yoksa “Henüz mesaj yok” yazıyor.
-                              stream: FirebaseFirestore.instance
-                                  .collection('chats')
-                                  .doc(chatDoc.id)
-                                  .collection('messages')
-                                  .snapshots(), //Buradaki verileri sürekli dinleyen bir stream başlatıyoruz.
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return Text("Yükleniyor...");
-                                }
-                                if (snapshot.hasError) {
-                                  return Text("Hata oluştu");
-                                }
-                                final messages =
-                                    snapshot.data?.docs ??
-                                    []; //Firestore’dan gelen sohbet mesajlarını liste olarak alır, yoksa boş liste döner.
-
-                                if (messages.isNotEmpty) {
-                                  final lastMessage = messages.last;
-                                  final messageData =
-                                      lastMessage.data()
-                                          as Map<String, dynamic>;
-                                  return Text(
-                                    "Son mesaj: ${messageData['text'] ?? ''}",
-                                  );
-                                } else {
-                                  return Text("Henüz mesaj yok");
-                                }
-                              },
-                            ),
-                          ],
-                        ),
                       );
                     },
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
 
             SizedBox(height: 20),
@@ -239,5 +263,6 @@ Firestore → "Bu kişiyle ilgili ne biliyoruz?" (e-posta, mesajlar, zaman bilgi
     );
   }
 }
-//buildChat içinde kullanılan currentId ohbet odasını oluştururken kullanılıyor. Yani kimlerle sohbet odası açılacağını belirlemek için.
+
+//buildChat içinde kullanılan currentId ohbet odasını oluştururken kullanılıyor. Yani kimlerle sohbet odası açılacağını belirlem
 //elevatedButton içinde kullanılan currentId ise, mesaj gönderirken kullanılıyor. Yani mesajın hangi kullanıcı tarafından gönderildiğini belirlemek için.

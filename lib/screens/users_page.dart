@@ -59,12 +59,28 @@ class UserPage extends StatelessWidget {
                   //her kullanıcı için bir liste öğesi oluşturur
                   title: Text(email),
                   subtitle: Text('Oluşturulma zamanı: $created'),
-                  onTap: () {
+                  onTap: () async {
                     // kullanıcıya tıklanınca sohbet sayfasına git
+                    // ⚠️ Burada chat belgesini yoksa oluşturuyoruz — böylece
+                    // HomePage'de kullanıcı belgesi eksik olsa bile otherEmail'den gösterir.
+                    final chatRef = FirebaseFirestore.instance
+                        .collection('chats')
+                        .doc(chatId);
+                    final chatSnapshot = await chatRef.get();
+                    if (!chatSnapshot.exists) {
+                      await chatRef.set({
+                        'members': [currentUserId, otherUserId],
+                        'createdAt': FieldValue.serverTimestamp(),
+                        'otherEmail':
+                            email, // fallback için chat içinde email saklıyoruz
+                      }, SetOptions(merge: true));
+                    }
+
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ChatPage(chatId: chatId),
+                        builder: (_) =>
+                            ChatPage(chatId: chatId, otherUserEmail: email),
                       ),
                     );
                   },

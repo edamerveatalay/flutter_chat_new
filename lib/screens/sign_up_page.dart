@@ -24,29 +24,40 @@ class _SignUpPageState extends State<SignUpPage> {
     print("Firestore’a yazılıyor...");
 
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      // 🔹 Kullanıcı oluştur
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      // 🔹 Kullanıcının UID’sini al
+      String uid = userCredential.user!.uid;
+
       FirebaseFirestore.instance
           .collection(
             'users',
           ) // Firestore’da users adında bir koleksiyon oluşturduk
           .doc(
-            FirebaseAuth
-                .instance
-                .currentUser! // belgenin adı = o kullanıcının UID’si olur
-                .uid,
+            uid, // belgenin adı = o kullanıcının UID’si olur
           ) //şu anki kullanıcıyı alıyoruz ve uid'sini yani benzersiz kimliğini alıyoruz
           .set({
             'email': email, // belgeye "email" alanını ekler
             'password': password, // belgeye "password" alanını ekler
             'createdAt':
                 FieldValue.serverTimestamp(), // belgeye "createdAt" alanını ekler ve sunucu zaman damgasını kullanır
-
             //fieldvalue : firestore'da bazı özel değerleri kendi sunucunsundan almak için kullanılan sınıftır
           }, SetOptions(merge: true));
       // !!!!!FirebaseAuth sadece giriş-çıkış içindir, Firestore ise kullanıcıya dair ek bilgileri tutmamıza yarar.
+
+      print("Kullanıcı UID: ${FirebaseAuth.instance.currentUser!.uid}");
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .get();
+
+      if (doc.exists) {
+        print("Firestore kaydı bulundu: ${doc.data()}");
+      } else {
+        print("Firestore kaydı BULUNAMADI!");
+      }
 
       Navigator.pushReplacement(
         //navigator sayfalar arası geçişi sağlar
